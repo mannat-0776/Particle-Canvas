@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Particle Canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ui-bg: rgba(255,255,255,0.88);
+    --ui-border: rgba(0,0,0,0.08);
+    --text-primary: #1a1a1a;
+    --text-muted: #999;
+    --accent: #1a1a1a;
+    --radius: 10px;
+  }
+
+  body {
+    background: #fafaf8;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    cursor: none;
+    font-family: 'DM Mono', monospace;
+  }
+
+  canvas {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #fafaf8;
+  }
+
+  /* Custom cursor */
+  #cursor {
+    position: fixed;
+    pointer-events: none;
+    z-index: 100;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.2s;
+  }
+  #cursor svg { display: block; }
+
+  /* Top-left title */
+  #brand {
+    position: fixed;
+    top: 28px;
+    left: 32px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #brand h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+    line-height: 1;
+  }
+  #brand p {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  /* Particle count */
+  #counter {
+    position: fixed;
+    top: 28px;
+    right: 32px;
+    z-index: 10;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Bottom control bar */
+  #controls {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 50px;
+    padding: 8px 14px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+  }
+
+  .divider {
+    width: 1px;
+    height: 20px;
+    background: var(--ui-border);
+    margin: 0 2px;
+  }
+
+  /* Mode buttons */
+  .mode-btn {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    outline: none;
+    flex-shrink: 0;
+  }
+  .mode-btn:hover { transform: scale(1.15); }
+  .mode-btn.active { border-color: var(--text-primary); transform: scale(1.1); }
+
+  /* Size slider */
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+  }
+  .slider-wrap label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 72px;
+    height: 2px;
+    background: #ddd;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+
+  /* Action buttons */
+  .action-btn {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .action-btn:hover {
+    background: rgba(0,0,0,0.05);
+    border-color: rgba(0,0,0,0.18);
+  }
+  .action-btn.save {
+    background: var(--text-primary);
+    color: #fafaf8;
+    border-color: var(--text-primary);
+  }
+  .action-btn.save:hover { background: #333; }
+
+  /* Hint toast */
+  #hint {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 1s;
+    opacity: 1;
+  }
+
+  /* Trail toggle */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 2px;
+  }
+  .toggle-wrap label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .toggle {
+    position: relative;
+    width: 28px;
+    height: 15px;
+    cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: #ddd;
+    border-radius: 15px;
+    transition: background 0.2s;
+  }
+  .toggle input:checked ~ .toggle-track { background: var(--accent); }
+  .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 11px;
+    height: 11px;
+    background: white;
+    border-radius: 50%;
+    transition: left 0.2s;
+  }
+  .toggle input:checked ~ .toggle-thumb { left: 15px; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<!-- Custom cursor -->
+<div id="cursor">
+  <svg id="cursor-svg" width="20" height="20" viewBox="0 0 20 20">
+    <circle cx="10" cy="10" r="3" fill="#1a1a1a" />
+    <circle cx="10" cy="10" r="7" fill="none" stroke="#1a1a1a" stroke-width="0.8" opacity="0.3" />
+  </svg>
+</div>
+
+<!-- Brand -->
+<div id="brand">
+  <h1>Particle Canvas</h1>
+  <p>Move to paint</p>
+</div>
+
+<!-- Counter -->
+<div id="counter">0 particles</div>
+
+<!-- Hint -->
+<div id="hint">move your mouse to begin painting</div>
+
+<!-- Controls -->
+<div id="controls">
+
+  <!-- Modes -->
+  <button class="mode-btn active" data-mode="ink" title="Ink" style="background: radial-gradient(circle at 35% 35%, #555, #111);"></button>
+  <button class="mode-btn" data-mode="ember" title="Ember" style="background: radial-gradient(circle at 35% 35%, #ff9f43, #ee5a24);"></button>
+  <button class="mode-btn" data-mode="ocean" title="Ocean" style="background: radial-gradient(circle at 35% 35%, #74b9ff, #0984e3);"></button>
+  <button class="mode-btn" data-mode="prism" title="Prism" style="background: conic-gradient(from 0deg, #f44, #f80, #ff0, #4f4, #08f, #84f, #f44);"></button>
+  <button class="mode-btn" data-mode="sakura" title="Sakura" style="background: radial-gradient(circle at 35% 35%, #fdcfe8, #e84393);"></button>
+
+  <div class="divider"></div>
+
+  <!-- Size -->
+  <div class="slider-wrap">
+    <label>size</label>
+    <input type="range" id="size-slider" min="1" max="5" value="2" step="0.5" />
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Trails toggle -->
+  <div class="toggle-wrap">
+    <label for="trail-toggle">trails</label>
+    <label class="toggle">
+      <input type="checkbox" id="trail-toggle" checked />
+      <span class="toggle-track"></span>
+      <span class="toggle-thumb"></span>
+    </label>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Actions -->
+  <button class="action-btn" id="clear-btn">clear</button>
+  <button class="action-btn save" id="save-btn">save ↓</button>
+
+</div>
+
+<script>
+const canvas = document.getElementById('canvas')
+const ctx = canvas.getContext('2d')
+const cursor = document.getElementById('cursor')
+const counter = document.getElementById('counter')
+const hint = document.getElementById('hint')
+const sizeSlider = document.getElementById('size-slider')
+const trailToggle = document.getElementById('trail-toggle')
+
+let W, H
+function resize() {
+  W = canvas.width = window.innerWidth
+  H = canvas.height = window.innerHeight
+}
+resize()
+window.addEventListener('resize', resize)
+
+// --- State ---
+let mode = 'ink'
+let brushSize = 2
+let trailsOn = true
+let particles = []
+let mouse = { x: W/2, y: H/2, vx: 0, vy: 0, px: W/2, py: H/2 }
+let hintShown = false
+let animId
+
+// --- Color palettes ---
+const MODES = {
+  ink: () => {
+    const l = Math.floor(Math.random() * 60 + 10)
+    return `hsl(0,0%,${l}%)`
+  },
+  ember: () => {
+    const hue = Math.random() * 40 + 10 // 10–50 (orange-red)
+    const sat = Math.random() * 30 + 70
+    const lit = Math.random() * 30 + 40
+    return `hsl(${hue},${sat}%,${lit}%)`
+  },
+  ocean: () => {
+    const hue = Math.random() * 40 + 190 // 190–230 (blue-teal)
+    const sat = Math.random() * 30 + 60
+    const lit = Math.random() * 30 + 45
+    return `hsl(${hue},${sat}%,${lit}%)`
+  },
+  prism: () => {
+    const hue = Math.random() * 360
+    const sat = Math.random() * 20 + 75
+    const lit = Math.random() * 20 + 50
+    return `hsl(${hue},${sat}%,${lit}%)`
+  },
+  sakura: () => {
+    const hue = Math.random() * 30 + 330 // pink-rose
+    const sat = Math.random() * 30 + 55
+    const lit = Math.random() * 25 + 60
+    return `hsl(${hue},${sat}%,${lit}%)`
+  }
+}
+
+// --- Particle class ---
+class Particle {
+  constructor(x, y, vx, vy) {
+    const speed = Math.sqrt(vx*vx + vy*vy)
+    const scale = Math.min(speed * 0.12 + 0.5, 3.5) * brushSize
+    this.x = x + (Math.random() - 0.5) * scale * 4
+    this.y = y + (Math.random() - 0.5) * scale * 4
+    const angle = Math.atan2(vy, vx) + (Math.random() - 0.5) * 1.2
+    const mag = Math.random() * speed * 0.4 + 0.5
+    this.vx = Math.cos(angle) * mag
+    this.vy = Math.sin(angle) * mag + (Math.random() - 0.5) * 0.5
+    this.size = Math.random() * scale * 1.5 + scale * 0.3
+    this.alpha = Math.random() * 0.5 + 0.5
+    this.decay = Math.random() * 0.018 + 0.01
+    this.color = MODES[mode]()
+    this.gravity = 0.015
+    this.wobble = (Math.random() - 0.5) * 0.06
+  }
+
+  update() {
+    this.x += this.vx
+    this.y += this.vy
+    this.vy += this.gravity
+    this.vx += this.wobble
+    this.vx *= 0.97
+    this.vy *= 0.97
+    this.alpha -= this.decay
+    this.size *= 0.994
+  }
+
+  draw() {
+    ctx.globalAlpha = Math.max(0, this.alpha)
+    ctx.fillStyle = this.color
+    ctx.beginPath()
+    ctx.arc(this.x, this.y, Math.max(0.1, this.size), 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  get alive() { return this.alpha > 0.01 && this.size > 0.1 }
+}
+
+// --- Spawn particles ---
+function spawnParticles(x, y, vx, vy) {
+  const speed = Math.sqrt(vx*vx + vy*vy)
+  const count = Math.floor(speed * 0.6 + 3)
+  for (let i = 0; i < Math.min(count, 18); i++) {
+    particles.push(new Particle(x, y, vx, vy))
+  }
+  if (particles.length > 6000) particles.splice(0, 200)
+}
+
+// --- Draw loop ---
+function draw() {
+  // Fade effect for trails
+  if (trailsOn) {
+    ctx.globalAlpha = 0.12
+    ctx.fillStyle = '#fafaf8'
+    ctx.fillRect(0, 0, W, H)
+  }
+
+  ctx.globalAlpha = 1
+  particles = particles.filter(p => p.alive)
+  for (const p of particles) {
+    p.update()
+    p.draw()
+  }
+  ctx.globalAlpha = 1
+
+  counter.textContent = particles.length.toLocaleString() + ' particles'
+  animId = requestAnimationFrame(draw)
+}
+draw()
+
+// --- Mouse ---
+window.addEventListener('mousemove', e => {
+  const vx = e.clientX - mouse.x
+  const vy = e.clientY - mouse.y
+  mouse.x = e.clientX
+  mouse.y = e.clientY
+  mouse.vx = vx
+  mouse.vy = vy
+
+  // Cursor
+  cursor.style.left = e.clientX + 'px'
+  cursor.style.top = e.clientY + 'px'
+
+  // Hide hint
+  if (!hintShown) {
+    hintShown = true
+    hint.style.opacity = '0'
+    setTimeout(() => hint.style.display = 'none', 1000)
+  }
+
+  const speed = Math.sqrt(vx*vx + vy*vy)
+  if (speed > 1.5) spawnParticles(e.clientX, e.clientY, vx, vy)
+})
+
+// Update cursor size based on brush
+function updateCursorSize() {
+  const s = brushSize * 7 + 4
+  document.getElementById('cursor-svg').setAttribute('width', s)
+  document.getElementById('cursor-svg').setAttribute('height', s)
+  document.getElementById('cursor-svg').setAttribute('viewBox', `0 0 ${s} ${s}`)
+  const cx = s/2, cy = s/2
+  const circles = document.getElementById('cursor-svg').querySelectorAll('circle')
+  circles[0].setAttribute('cx', cx); circles[0].setAttribute('cy', cy)
+  circles[0].setAttribute('r', brushSize * 1.2)
+  circles[1].setAttribute('cx', cx); circles[1].setAttribute('cy', cy)
+  circles[1].setAttribute('r', brushSize * 3.5)
+}
+
+// --- Mode buttons ---
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    mode = btn.dataset.mode
+  })
+})
+
+// --- Slider ---
+sizeSlider.addEventListener('input', () => {
+  brushSize = parseFloat(sizeSlider.value)
+  updateCursorSize()
+})
+
+// --- Trails ---
+trailToggle.addEventListener('change', () => {
+  trailsOn = trailToggle.checked
+  if (!trailsOn) {
+    // clear the fade — draw full bg once
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#fafaf8'
+    ctx.fillRect(0, 0, W, H)
+  }
+})
+
+// --- Clear ---
+document.getElementById('clear-btn').addEventListener('click', () => {
+  particles = []
+  ctx.globalAlpha = 1
+  ctx.fillStyle = '#fafaf8'
+  ctx.fillRect(0, 0, W, H)
+})
+
+// --- Save ---
+document.getElementById('save-btn').addEventListener('click', () => {
+  // Render a clean version without fade artifacts
+  const link = document.createElement('a')
+  link.download = `particle-canvas-${Date.now()}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+})
+
+// --- Keyboard shortcuts ---
+window.addEventListener('keydown', e => {
+  if (e.key === 'c' || e.key === 'C') document.getElementById('clear-btn').click()
+  if (e.key === 's' || e.key === 'S') document.getElementById('save-btn').click()
+  if (e.key === 't' || e.key === 'T') {
+    trailToggle.checked = !trailToggle.checked
+    trailToggle.dispatchEvent(new Event('change'))
+  }
+  const modeKeys = { '1':'ink', '2':'ember', '3':'ocean', '4':'prism', '5':'sakura' }
+  if (modeKeys[e.key]) {
+    mode = modeKeys[e.key]
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode)
+    })
+  }
+})
+
+updateCursorSize()
+</script>
+</body>
+</html>
